@@ -1,15 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Chat with GPT</title>
+  <meta charset="UTF-8">
+  <title>Chat with GPT</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <h1>Chat with GPT</h1>
-    <input type="text" id="userInput" placeholder="Type a message">
-    <button onclick="sendMessage()">Send</button>
-    <div id="chatArea"></div>
+  <div class="chat-container">
+    <h1>🤖 Chat with GPT</h1>
 
-    <script src="script.js"></script>
+    <!-- Chat box (this is what was missing in your UI) -->
+    <div id="chatArea" class="chat-box"></div>
+
+    <div class="input-area">
+      <input type="text" id="userInput" placeholder="Type a message..." />
+      <button onclick="sendMessage()">Send</button>
+    </div>
+  </div>
+  <script src="script.js"></script>
 </body>
 </html>
