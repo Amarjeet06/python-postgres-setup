@@ -1,22 +1,47 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Chat with GPT</title>
-  <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8" />
+  <title>My GPT Chat</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- Markdown + Syntax Highlight (CDN) -->
+  <script src="https://unpkg.com/marked@12.0.2/marked.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/highlight.js@11.9.0/styles/github.min.css">
+  <script src="https://unpkg.com/highlight.js@11.9.0/lib/common.min.js"></script>
 </head>
 <body>
-  <div class="chat-container">
-    <h1>🤖 Chat with GPT</h1>
+  <div class="app">
+    <header class="app-header">
+      <div class="brand">
+        <div class="logo">🤖</div>
+        <div>
+          <div class="title">My GPT</div>
+          <div class="subtitle">
+            <span id="statusDot" class="status-dot offline"></span>
+            <span id="statusText">Offline</span>
+          </div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="themeBtn" class="btn" title="Toggle theme">🌓</button>
+        <button id="clearBtn" class="btn" title="Clear conversation">🧹</button>
+      </div>
+    </header>
 
-    <!-- Chat box (this is what was missing in your UI) -->
-    <div id="chatArea" class="chat-box"></div>
+    <main id="chat" class="chat"></main>
 
-    <div class="input-area">
-      <input type="text" id="userInput" placeholder="Type a message..." />
-      <button onclick="sendMessage()">Send</button>
+    <footer class="composer">
+      <textarea id="input" rows="1" placeholder="Type a message... (Shift+Enter for newline)"></textarea>
+      <button id="sendBtn" class="btn-send" title="Send">➤</button>
+    </footer>
+
+    <div class="disclaimer">
+      This chatbot may produce inaccurate information. Use discretion.
     </div>
   </div>
+
   <script src="script.js"></script>
 </body>
 </html>
