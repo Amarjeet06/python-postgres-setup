@@ -48,5 +48,5 @@ Set env vars in Vercel (remember: DATA_DIR=/tmp/mygpt-data)
 
 The text-to-image endpoint is present but still under development and may return errors depending on provider/model credentials.
 
-👨‍💻 Developed by: Amarjeet Singh Minhas, under guidence of Amanjit
+👨‍💻 Developed by: Amarjeet Singh Minhas
 📁 Technologies: FastAPI, Python, Google GenAI, LangChain, Vercel
