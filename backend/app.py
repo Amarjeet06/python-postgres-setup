@@ -52,8 +52,13 @@ IMAGEN_MODEL = os.getenv("IMAGEN_MODEL",        "imagen-3.0-fast")
 # Provider switch: "auto" | "hf" | "google"
 IMAGE_PROVIDER = (os.getenv("IMAGE_PROVIDER") or "auto").lower()
 
-DATA_DIR = Path("data")
-DATA_DIR.mkdir(exist_ok=True)
+# Use /tmp on Vercel (read-only FS except /tmp). Falls back to ./data locally.
+DATA_DIR = Path(
+    os.getenv("DATA_DIR")
+    or ("/tmp/mygpt-data" if os.getenv("VERCEL") or os.getenv("VERCEL_ENV") else "data")
+)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 bearer = HTTPBearer(auto_error=False)
