@@ -1,17 +1,26 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "functions": {
-    "api/index.py": { "runtime": "python3.11" }
-  },
-  "routes": [
-    { "src": "^/api/.*", "dest": "/api/index.py" },
-    { "src": "^/auth/.*", "dest": "/api/index.py" },
-    { "src": "^/(docs|openapi.json)$", "dest": "/api/index.py" },
+  "version": 2,
 
-    { "src": "^/login.html$", "dest": "/frontend/login.html" },
-    { "src": "^/signup.html$", "dest": "/frontend/signup.html" },
-    { "src": "^/(.*\\.(?:css|js|png|jpg|jpeg|gif|svg|ico))$", "dest": "/frontend/$1" },
-    { "src": "^/$", "dest": "/frontend/index.html" },
-    { "src": "^/(.*)$", "dest": "/frontend/$1" }
+  "functions": {
+    "api/**/*.py": {
+      "runtime": "python3.11"
+    }
+  },
+
+  "routes": [
+    { "src": "^/(?:api|auth)/.*", "dest": "/api/index.py" },
+    { "src": "^/(docs|openapi\\.json)$", "dest": "/api/index.py" },
+
+    { "src": "^/login\\.html$", "dest": "/frontend/login.html" },
+    { "src": "^/signup\\.html$", "dest": "/frontend/signup.html" },
+    { "src": "^/index\\.html$", "dest": "/frontend/index.html" },
+
+    { "src": "^/login\\.js$", "dest": "/frontend/login.js" },
+    { "src": "^/signup\\.js$", "dest": "/frontend/signup.js" },
+    { "src": "^/script\\.js$", "dest": "/frontend/script.js" },
+    { "src": "^/styles\\.css$", "dest": "/frontend/styles.css" },
+
+    { "src": "^/(.*)$", "dest": "/frontend/index.html" }
   ]
 }
