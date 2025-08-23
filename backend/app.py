@@ -1,5 +1,5 @@
 # ==============================
-# My GPT Backend (full version)
+# My GPT Backend (Vercel / HF-first)
 # ==============================
 from io import BytesIO
 from pathlib import Path
@@ -23,14 +23,18 @@ from langchain.chains import ConversationChain
 from langchain.memory import ConversationBufferWindowMemory
 from starlette.concurrency import run_in_threadpool
 
-# Google GenAI (vision + image gen)
-from google import genai
-from google.genai import types
+# Optional Google GenAI (guarded so we don't crash if unset)
+try:
+    from google import genai
+    from google.genai import types
+except Exception:
+    genai = None
+    types = None
 
 # Hugging Face fallback (image gen)
 try:
     from huggingface_hub import InferenceClient
-except ImportError:
+except Exception:
     InferenceClient = None
 
 
@@ -46,7 +50,7 @@ VISION_MODEL = os.getenv("GEMINI_VISION_MODEL", "gemini-2.5-flash")
 IMAGEN_MODEL = os.getenv("IMAGEN_MODEL",        "imagen-3.0-fast")
 
 # Provider switch: "auto" | "hf" | "google"
-IMAGE_PROVIDER = os.getenv("IMAGE_PROVIDER", "auto").lower()
+IMAGE_PROVIDER = (os.getenv("IMAGE_PROVIDER") or "auto").lower()
 
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
@@ -58,19 +62,29 @@ app = FastAPI(title="My GPT Backend")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # set to your frontend origin in production
+    allow_origins=["*"],  # (for same-domain frontend on Vercel this is fine)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Official Google GenAI client — uses GEMINI_API_KEY
-GENAI_CLIENT = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+# Lazy Google client — only if key present and lib available
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GENAI_CLIENT = None
+if GEMINI_API_KEY and genai is not None:
+    try:
+        GENAI_CLIENT = genai.Client(api_key=GEMINI_API_KEY)
+    except Exception as e:
+        # Do not crash the function; we can still use HF
+        print("WARN: Google GenAI client init failed:", repr(e))
+        GENAI_CLIENT = None
 
 
 # ------------------------ MODEL DISCOVERY (Google) ------------------------
 def list_model_names() -> List[str]:
-    """Return all model names visible to your Google API key (normalized)."""
+    """Return model names visible to your Google API key (normalized)."""
+    if GENAI_CLIENT is None:
+        return []
     try:
         items = GENAI_CLIENT.models.list()
         names = []
@@ -159,6 +173,9 @@ def chain_key(user: str, chat_id: str) -> str:
     return f"{user}:{chat_id}"
 
 def get_chain(user: str, chat_id: str) -> ConversationChain:
+    if not os.getenv("GEMINI_API_KEY"):
+        # Make it explicit so failures are clear on Vercel
+        raise HTTPException(status_code=500, detail="Server missing GEMINI_API_KEY for chat model.")
     key = chain_key(user, chat_id)
     if key not in chains:
         llm = ChatGoogleGenerativeAI(model=TEXT_MODEL, api_key=os.getenv("GEMINI_API_KEY"))
@@ -203,6 +220,8 @@ def health():
         "vision_model": VISION_MODEL,
         "image_model": IMAGEN_MODEL,
         "image_provider": IMAGE_PROVIDER,
+        "google_enabled": GENAI_CLIENT is not None,
+        "hf_token_present": bool(os.getenv("HF_TOKEN")),
     }
 
 @app.get("/api/models")
@@ -212,11 +231,12 @@ def models(user=Depends(auth_required)):
 @app.get("/api/image/status")
 def image_status(user=Depends(auth_required)):
     return {
-        "hf_token_present": bool(os.getenv("HF_TOKEN")),
-        "hf_model": os.getenv("HF_IMAGE_MODEL"),
         "provider": IMAGE_PROVIDER,
         "imagen_env": IMAGEN_MODEL,
+        "google_enabled": GENAI_CLIENT is not None,
         "google_visible_models": list_model_names(),
+        "hf_token_present": bool(os.getenv("HF_TOKEN")),
+        "hf_model": os.getenv("HF_IMAGE_MODEL"),
     }
 
 
@@ -306,10 +326,12 @@ async def chat(req: ChatReq, user=Depends(auth_required)):
     if chat_id not in store["chats"]:
         store["chats"][chat_id] = {"title": "New chat", "messages": [], "updated_at": int(time.time())}
 
-    chain = get_chain(u, chat_id)
-
     try:
+        chain = get_chain(u, chat_id)
         reply = await run_in_threadpool(chain.predict, input=req.user_input)
+    except HTTPException as he:
+        # surface missing key etc
+        raise he
     except Exception as e:
         return {"response": f"Error: {e}"}
 
@@ -339,6 +361,8 @@ async def analyze_image(
     chat_id: str = Form("default"),
     user=Depends(auth_required),
 ):
+    if GENAI_CLIENT is None or types is None:
+        return JSONResponse(status_code=400, content={"detail": "Vision requires GEMINI_API_KEY to be set on the server."})
     try:
         img_bytes = await image.read()
         img_part = types.Part.from_bytes(
@@ -368,17 +392,18 @@ async def analyze_image(
         return JSONResponse(status_code=400, content={"detail": str(e)})
 
 
-# ------------------------ HF FALLBACK HELPERS (text -> image) ------------------------
+# ------------------------ HF HELPERS (text -> image) ------------------------
 def get_hf_client(model_override: Optional[str] = None):
     """
-    Return (client, model_name, note). If not configured properly, client is None and note explains why.
+    Return (client, model_name, note).
+    If not configured properly, client is None and note explains why.
     """
     token = os.getenv("HF_TOKEN")
     model = model_override or os.getenv("HF_IMAGE_MODEL", "stabilityai/sd-turbo")
     if not InferenceClient:
         return None, model, "huggingface_hub not installed."
     if not token:
-        return None, model, "HF_TOKEN is not set in environment."
+        return None, model, "HF_TOKEN is not set on server."
     try:
         client = InferenceClient(token=token)
         return client, model, None
@@ -387,7 +412,7 @@ def get_hf_client(model_override: Optional[str] = None):
 
 def generate_with_hf(prompt: str, count: int = 1, model_override: Optional[str] = None):
     """
-    Generate images with Hugging Face, robust to different huggingface_hub versions.
+    Generate images with Hugging Face, robust to hub versions.
     Returns (images[dataURL], used_model, note_or_None).
     """
     client, model, note = get_hf_client(model_override)
@@ -399,8 +424,7 @@ def generate_with_hf(prompt: str, count: int = 1, model_override: Optional[str] 
 
     for _ in range(n):
         pil_img = None
-
-        # Attempt 1: width/height (most versions support)
+        # Attempt 1: width/height explicit
         try:
             pil_img = client.text_to_image(
                 prompt=prompt,
@@ -422,7 +446,7 @@ def generate_with_hf(prompt: str, count: int = 1, model_override: Optional[str] 
             else:
                 return [], model, f"Hugging Face error: {e}"
         except Exception as e:
-            # Last resort: call with only prompt/model (let server default size)
+            # Last resort: call with defaults only
             try:
                 pil_img = client.text_to_image(prompt=prompt, model=model)
             except Exception as e2:
@@ -452,6 +476,8 @@ async def generate_image(req: ImageGenReq, user=Depends(auth_required)):
     provider = (req.provider or IMAGE_PROVIDER or "auto").lower()
 
     def _try_google(model_name: str):
+        if GENAI_CLIENT is None or types is None:
+            raise RuntimeError("Google Imagen not available (GEMINI_API_KEY not set or library missing).")
         cfg = types.GenerateImagesConfig(
             number_of_images=max(1, min(req.count, 4)),
             aspect_ratio=req.aspect_ratio or "1:1",
@@ -470,15 +496,11 @@ async def generate_image(req: ImageGenReq, user=Depends(auth_required)):
 
         # ------------ Google path ------------
         if provider in ("google", "auto"):
-            # Only try Google if an Imagen model is actually visible to this key
-            visible = list_model_names()
+            visible = list_model_names() if GENAI_CLIENT is not None else []
             google_model = None
-
-            # Prefer .env override if visible
             if IMAGEN_MODEL and any(IMAGEN_MODEL in m for m in visible):
                 google_model = IMAGEN_MODEL
             else:
-                # otherwise pick first available imagen
                 google_model = pick_imagen_model()
 
             if google_model:
@@ -506,17 +528,13 @@ async def generate_image(req: ImageGenReq, user=Depends(auth_required)):
                     if images:
                         used_provider = "google"
                 except Exception as e:
-                    # Log and keep going to HF
                     print("Google Imagen error:", str(e))
             else:
-                # No imagen model visible to this key
                 if provider == "google":
-                    # user forced google; fail with clear message
                     return JSONResponse(
                         status_code=400,
                         content={"detail": "No Google Imagen model available to your API key."},
                     )
-                # if provider == auto: we'll try HF below
 
         # ------------ HF path ------------
         if not images and provider in ("auto", "hf"):
@@ -529,7 +547,7 @@ async def generate_image(req: ImageGenReq, user=Depends(auth_required)):
                     content={"detail": hf_note or "No image returned by available providers."},
                 )
 
-        # If we got here with images from Google:
+        # If images from Google:
         if images:
             return {"images": images, "note": note, "provider": used_provider or "google", "model_used": model_used}
 
