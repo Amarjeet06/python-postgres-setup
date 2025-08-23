@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Login • My GPT</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app" style="max-width:420px; margin:auto; display:flex; align-items:center; justify-content:center; min-height:100vh;">
+    <div class="chat-container" style="width:100%; background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:18px;">
+      <h2 style="margin:0 0 12px;">🔐 Log in</h2>
+
+      <!-- helper text with Sign Up link -->
+      <p class="subtitle" style="margin:0 0 16px; color:var(--muted)">
+        Log in or <a href="signup.html">create an account</a>.
+      </p>
+
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <input id="u" class="input" placeholder="Username" autocomplete="username" />
+        <input id="p" class="input" type="password" placeholder="Password" autocomplete="current-password" />
+        <button id="loginBtn" class="btn" style="background:var(--accent); color:#fff; border-color:transparent">Log in</button>
+        <div id="msg" style="color:var(--danger); font-size:13px; min-height:18px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="login.js"></script>
+</body>
+</html>

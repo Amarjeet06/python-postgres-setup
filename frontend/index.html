@@ -6,39 +6,70 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="styles.css" />
 
-  <!-- Markdown + Syntax Highlight (CDN) -->
+  <!-- Markdown + Syntax Highlight (optional for nice formatting) -->
   <script src="https://unpkg.com/marked@12.0.2/marked.min.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/highlight.js@11.9.0/styles/github.min.css">
   <script src="https://unpkg.com/highlight.js@11.9.0/lib/common.min.js"></script>
 </head>
 <body>
-  <div class="app">
-    <header class="app-header">
-      <div class="brand">
+  <div class="app app-with-sidebar">
+    <!-- SIDEBAR -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
         <div class="logo">🤖</div>
-        <div>
-          <div class="title">My GPT</div>
-          <div class="subtitle">
-            <span id="statusDot" class="status-dot offline"></span>
-            <span id="statusText">Offline</span>
+        <div class="brand-title">My GPT</div>
+      </div>
+
+      <div class="sidebar-actions">
+        <button id="newChatBtn" class="btn new-chat">＋ New chat</button>
+      </div>
+
+      <div id="chatList" class="chat-list"></div>
+
+      <div class="sidebar-footer">
+        <small>Chats are saved per user</small>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <div class="main">
+      <header class="app-header">
+        <button id="toggleSidebar" class="btn icon only-mobile" title="Toggle sidebar">☰</button>
+
+        <div class="brand">
+          <div class="logo">🤖</div>
+          <div>
+            <div class="title">My GPT</div>
+            <div class="subtitle">
+              <span id="statusDot" class="status-dot offline"></span>
+              <span id="statusText">Offline</span>
+            </div>
           </div>
         </div>
+
+        <div class="header-actions">
+          <button id="themeBtn" class="btn icon" title="Toggle theme">🌓</button>
+          <button id="clearBtn" class="btn icon" title="Clear conversation">🧹</button>
+
+          <!-- NEW: Image features -->
+          <button id="uploadBtn" class="btn icon" title="Analyze image">📷</button>
+          <button id="genBtn" class="btn icon" title="Generate image">🖼️</button>
+          <input id="imgInput" type="file" accept="image/*" style="display:none" />
+
+          <button id="logoutBtn" class="btn icon" title="Logout">🚪</button>
+        </div>
+      </header>
+
+      <main id="chat" class="chat"></main>
+
+      <footer class="composer">
+        <textarea id="input" rows="1" placeholder="Type a message... (Shift+Enter for newline)"></textarea>
+        <button id="sendBtn" class="btn-send" title="Send">➤</button>
+      </footer>
+
+      <div class="disclaimer">
+        This chatbot may produce inaccurate information. Use discretion.
       </div>
-      <div class="header-actions">
-        <button id="themeBtn" class="btn" title="Toggle theme">🌓</button>
-        <button id="clearBtn" class="btn" title="Clear conversation">🧹</button>
-      </div>
-    </header>
-
-    <main id="chat" class="chat"></main>
-
-    <footer class="composer">
-      <textarea id="input" rows="1" placeholder="Type a message... (Shift+Enter for newline)"></textarea>
-      <button id="sendBtn" class="btn-send" title="Send">➤</button>
-    </footer>
-
-    <div class="disclaimer">
-      This chatbot may produce inaccurate information. Use discretion.
     </div>
   </div>
 

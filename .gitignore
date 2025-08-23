@@ -12,3 +12,6 @@ venv/
 # Misc
 *.log
 .DS_Store
+
+# App data (local, per-user chats)
+data/
