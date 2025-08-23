@@ -1,15 +1,17 @@
 {
-  "version": 2,
-  "builds": [
-    { "src": "api/index.py", "use": "@vercel/python" },
-    { "src": "frontend/**", "use": "@vercel/static" }
-  ],
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/index.py": { "runtime": "python3.11", "maxDuration": 30, "memory": 1024 }
+    "api/index.py": { "runtime": "python3.11" }
   },
   "routes": [
-    { "src": "/api/(.*)",  "dest": "/api/index.py" },
-    { "src": "/auth/(.*)", "dest": "/api/index.py" },
-    { "src": "/(.*)",      "dest": "/frontend/$1" }
+    { "src": "^/api/.*", "dest": "/api/index.py" },
+    { "src": "^/auth/.*", "dest": "/api/index.py" },
+    { "src": "^/(docs|openapi.json)$", "dest": "/api/index.py" },
+
+    { "src": "^/login.html$", "dest": "/frontend/login.html" },
+    { "src": "^/signup.html$", "dest": "/frontend/signup.html" },
+    { "src": "^/(.*\\.(?:css|js|png|jpg|jpeg|gif|svg|ico))$", "dest": "/frontend/$1" },
+    { "src": "^/$", "dest": "/frontend/index.html" },
+    { "src": "^/(.*)$", "dest": "/frontend/$1" }
   ]
 }
