@@ -2,7 +2,7 @@
 const API_BASE =
   location.hostname === "127.0.0.1" || location.hostname === "localhost"
     ? "http://127.0.0.1:8000"
-    : ""; // on Vercel use /api/* rewrite
+    : ""; // on Vercel you can use /api/* rewrites
 
 const u = document.getElementById("u");
 const p = document.getElementById("p");
@@ -34,13 +34,11 @@ async function login(){
       headers: { "Content-Type":"application/json" },
       body: JSON.stringify({ username, password })
     });
-
     const data = await res.json();
     if(!res.ok){
       msg.textContent = data?.detail || "Login failed. Please try again.";
       return;
     }
-
     // Save auth & go to chat
     localStorage.setItem("token", data.token);
     localStorage.setItem("username", data.username);

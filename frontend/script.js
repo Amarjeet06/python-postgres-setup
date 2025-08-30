@@ -1,16 +1,16 @@
-/* ===== ENV / API BASE (dev vs prod) ===== */
+// ===== ENV / API BASE (dev vs prod) =====
 const API_BASE =
   location.hostname === "127.0.0.1" || location.hostname === "localhost"
     ? "http://127.0.0.1:8000"
-    : ""; // on Vercel use /api/* rewrite
+    : ""; // on Vercel use /api/* rewrites
 
-/* ===== AUTH HELPERS ===== */
+// ===== AUTH HELPERS =====
 function token() { return localStorage.getItem("token") || ""; }
 function authHeaders() { const t = token(); return t ? { Authorization: `Bearer ${t}` } : {}; }
 function ensureLoggedIn(){ if(!token()) location.href = "login.html"; }
 ensureLoggedIn();
 
-/* ===== ELEMENTS ===== */
+// ===== ELEMENTS =====
 const chat = document.getElementById("chat");
 const input = document.getElementById("input");
 const sendBtn = document.getElementById("sendBtn");
@@ -24,12 +24,19 @@ const chatList = document.getElementById("chatList");
 const newChatBtn = document.getElementById("newChatBtn");
 const toggleSidebarBtn = document.getElementById("toggleSidebar");
 
-/* NEW: image UI elements */
+// media / files
 const uploadBtn = document.getElementById("uploadBtn");
 const genBtn = document.getElementById("genBtn");
 const imgInput = document.getElementById("imgInput");
+const pdfBtn = document.getElementById("pdfBtn");
+const pdfInput = document.getElementById("pdfInput");
 
-/* ===== MARKDOWN / HIGHLIGHT ===== */
+// NEW: ML features
+const searchBtn = document.getElementById("searchBtn");
+const routeBtn = document.getElementById("routeBtn");
+const nextBtn = document.getElementById("nextBtn");
+
+// ===== MARKDOWN / HIGHLIGHT =====
 if (window.marked) {
   marked.setOptions({
     breaks: true,
@@ -41,21 +48,21 @@ if (window.marked) {
   });
 }
 
-/* ===== STATE (server-backed) ===== */
+// ===== STATE (server-backed) =====
 let chats = [];    // [{id,title,updated_at}]
 let activeId = ""; // current chat id
 
-/* ===== API WRAPPER ===== */
-async function api(path, options={}){
+// ===== API WRAPPER =====
+async function api(path, options = {}) {
   const opts = {
     ...options,
     headers: {
       ...(options.headers || {}),
-      "Content-Type":"application/json",
+      "Content-Type": "application/json",
       ...authHeaders(),
     }
   };
-  // Don't set content-type for FormData calls
+  // Don't set content-type for FormData
   if (options.body instanceof FormData) {
     delete opts.headers["Content-Type"];
   }
@@ -69,25 +76,25 @@ async function api(path, options={}){
   return res.json();
 }
 
-/* ===== THEME ===== */
+// ===== THEME =====
 (function initTheme(){
   const saved = localStorage.getItem("theme") || "dark";
   document.body.setAttribute("data-theme", saved);
 })();
-themeBtn.addEventListener("click", () => {
+themeBtn?.addEventListener("click", () => {
   const next = document.body.getAttribute("data-theme") === "light" ? "dark" : "light";
   document.body.setAttribute("data-theme", next);
   localStorage.setItem("theme", next);
 });
 
-/* ===== LOGOUT ===== */
-logoutBtn.addEventListener("click", ()=>{
+// ===== LOGOUT =====
+logoutBtn?.addEventListener("click", ()=>{
   localStorage.removeItem("token");
   localStorage.removeItem("username");
   location.href = "login.html";
 });
 
-/* ===== HEALTH PING ===== */
+// ===== HEALTH PING =====
 async function ping(){
   setStatus("idle");
   try{
@@ -102,7 +109,7 @@ function setStatus(state){
 }
 ping(); setInterval(ping, 15000);
 
-/* ===== TEXTAREA ===== */
+// ===== TEXTAREA =====
 function autosize(){
   input.style.height = "auto";
   input.style.height = Math.min(input.scrollHeight, 160) + "px";
@@ -112,11 +119,11 @@ input.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 });
 
-/* ===== SIDEBAR ===== */
+// ===== SIDEBAR =====
 toggleSidebarBtn?.addEventListener("click", () => {
   sidebar.classList.toggle("open");
 });
-newChatBtn.addEventListener("click", () => newChat());
+newChatBtn?.addEventListener("click", () => newChat());
 
 function renderSidebar(){
   chatList.innerHTML = "";
@@ -143,7 +150,7 @@ function renderSidebar(){
   });
 }
 
-/* ===== MESSAGE UI ===== */
+// ===== MESSAGE UI =====
 let typingEl = null;
 function messageEl(role, timeText){
   const msg = document.createElement("div");
@@ -164,7 +171,6 @@ function messageEl(role, timeText){
   return { msg, content };
 }
 
-/* Render markdown for BOTH user & assistant so uploaded/generated images appear */
 function addMessageEl(role, text){
   const { msg, content } = messageEl(role);
   if (window.marked) content.innerHTML = marked.parse(text || "");
@@ -181,7 +187,7 @@ function showTyping(){
 }
 function hideTyping(){ if (typingEl){ typingEl.remove(); typingEl = null; } }
 
-/* ===== LOAD & RENDER CHAT ===== */
+// ===== LOAD & RENDER CHAT =====
 async function loadChats(){
   const data = await api("/api/chats");
   chats = (data && data.chats) ? data.chats : [];
@@ -210,11 +216,7 @@ async function renderChat(){
 async function newChat(){
   const res = await api("/api/chats/new", { method: "POST" });
   activeId = res.chat_id;
-  // Also reset server memory for this chat
-  await api("/api/reset", {
-    method: "POST",
-    body: JSON.stringify({ chat_id: activeId })
-  });
+  await api("/api/reset", { method: "POST", body: JSON.stringify({ chat_id: activeId }) });
   await loadChats();
   input.focus();
 }
@@ -226,8 +228,40 @@ async function switchChat(id){
   sidebar.classList.remove("open");
 }
 
-/* ===== SEND FLOW ===== */
-sendBtn.addEventListener("click", sendMessage);
+// ========= RAG helper (client-side context injection) =========
+async function tryRagAugment(question, k = 6) {
+  try {
+    const search = await api("/api/search", {
+      method: "POST",
+      body: JSON.stringify({ query: question, chat_id: activeId || "default", k })
+    });
+
+    if (!search || !Array.isArray(search.results) || !search.results.length) {
+      return null; // no indexed docs; skip RAG
+    }
+
+    const top = search.results.slice(0, Math.min(k, search.results.length));
+    const ctx = top.map((r, i) => {
+      const src = r.source ? ` (source: ${r.source}${typeof r.section_idx==="number" ? `, sec ${r.section_idx}` : ""})` : "";
+      return `[${i+1}]${src}\n${(r.text||"").trim()}`;
+    }).join("\n\n");
+
+    const instr =
+      "Use ONLY the context blocks [1..n] below to answer the user's question.\n" +
+      "Be concise, and add bracket citations like [1], [2] after facts you pull from a block.\n" +
+      "If the context is insufficient, ask a brief clarifying question.";
+
+    const augmented = `${instr}\n\nContext:\n${ctx}\n\nQuestion: ${question}`;
+
+    const sources = top.map(r => (r.source || "").trim()).filter(Boolean);
+    return { augmented, sources };
+  } catch {
+    return null;
+  }
+}
+
+// ===== SEND FLOW (auto RAG + feedback) =====
+sendBtn?.addEventListener("click", sendMessage);
 input.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 });
@@ -245,36 +279,45 @@ async function sendMessage(){
 
   showTyping();
   try{
+    // Try to fetch top reranked snippets and inject as context
+    let rag = await tryRagAugment(text, 6);
+
+    const payload = { user_input: rag ? rag.augmented : text, chat_id: activeId };
     const data = await api("/api/chat", {
       method: "POST",
-      body: JSON.stringify({ user_input: text, chat_id: activeId })
+      body: JSON.stringify(payload)
     });
+
     hideTyping();
     addMessageEl("assistant", (data && data.response) || "(no response)");
-    await loadChats(); // refresh sidebar times/titles
+
+    // Show source feedback chips when we used RAG
+    if (rag && rag.sources && rag.sources.length) {
+      renderSourceFeedback(rag.sources, "Sources used");
+    }
+
+    // (Optional) refresh sidebar meta; avoid re-rendering messages
+    const chatsData = await api("/api/chats");
+    chats = (chatsData && chatsData.chats) ? chatsData.chats : chats;
+    renderSidebar();
+
   }catch(e){
     hideTyping();
     addMessageEl("assistant", "⚠️ Network error. Please try again.");
   }
 }
 
-/* Clear current conversation (server + memory) */
-clearBtn.addEventListener("click", async () => {
+// Clear current conversation (server + memory)
+clearBtn?.addEventListener("click", async () => {
   if(!activeId) return;
   await api(`/api/chats/${activeId}/clear`, { method: "POST" });
-  await api("/api/reset", {
-    method: "POST",
-    body: JSON.stringify({ chat_id: activeId })
-  });
+  await api("/api/reset", { method: "POST", body: JSON.stringify({ chat_id: activeId }) });
   await renderChat();
 });
 
-/* ===== NEW: IMAGE FEATURES ===== */
-
-/* Analyze an uploaded image with Gemini Vision */
-uploadBtn.addEventListener("click", () => imgInput.click());
-
-imgInput.addEventListener("change", async () => {
+// ===== IMAGE: Analyze (Vision) =====
+uploadBtn?.addEventListener("click", () => imgInput.click());
+imgInput?.addEventListener("change", async () => {
   const file = imgInput.files && imgInput.files[0];
   if (!file) return;
 
@@ -283,7 +326,6 @@ imgInput.addEventListener("change", async () => {
     "Describe this image"
   );
 
-  // show the uploaded image as a user message
   const url = URL.createObjectURL(file);
   addMessageEl("user", `(uploaded image)\n\n![image](${url})`);
   showTyping();
@@ -296,7 +338,7 @@ imgInput.addEventListener("change", async () => {
 
     const res = await fetch(`${API_BASE}/api/vision`, {
       method: "POST",
-      headers: { ...authHeaders() }, // IMPORTANT: don't set content-type when sending FormData
+      headers: { ...authHeaders() },
       body: form,
     });
 
@@ -312,8 +354,8 @@ imgInput.addEventListener("change", async () => {
   }
 });
 
-/* Generate an image with Imagen */
-genBtn.addEventListener("click", async () => {
+// ===== IMAGE: Generate (HF forced; no reload after) =====
+genBtn?.addEventListener("click", async () => {
   const prompt = window.prompt(
     "Image prompt (what to create)?",
     "A cute corgi wearing sunglasses, studio lighting"
@@ -327,25 +369,274 @@ genBtn.addEventListener("click", async () => {
     const res = await fetch(`${API_BASE}/api/image/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify({ prompt, aspect_ratio: "1:1", count: 1 }),
+      body: JSON.stringify({
+        prompt,
+        aspect_ratio: "1:1",
+        count: 1,
+        provider: "hf",                 // force HF to match backend behavior
+        chat_id: activeId || "default"
+      }),
     });
 
     const data = await res.json();
     hideTyping();
 
+    if (!res.ok) {
+      addMessageEl("assistant", `⚠️ Image generation failed: ${data?.detail || res.statusText}`);
+      return;
+    }
+
     if (data.images && data.images.length) {
       data.images.forEach((src) => addMessageEl("assistant", `![generated](${src})`));
-      await loadChats();
+      // IMPORTANT: do NOT call loadChats() here; generated images are not persisted server-side.
     } else {
-      addMessageEl("assistant", "No image returned.");
+      addMessageEl("assistant", data?.detail || "No image returned.");
     }
   } catch (e) {
     hideTyping();
-    addMessageEl("assistant", "⚠️ Image generation failed.");
+    addMessageEl("assistant", "⚠️ Network error while generating image.");
   }
 });
 
-/* ===== INIT ===== */
+// ===== PDF: Read (Summarize or QA) =====
+pdfBtn?.addEventListener("click", () => pdfInput.click());
+pdfInput?.addEventListener("change", async () => {
+  const file = pdfInput.files && pdfInput.files[0];
+  if (!file) return;
+
+  const mode = window.prompt("Type 'q' to ask a question about the PDF, or press OK to Summarize.", "");
+  let question = null;
+  if (mode && mode.trim().toLowerCase() === "q") {
+    question = window.prompt("Ask your question about the PDF:", "What are the key takeaways?");
+  }
+
+  addMessageEl("user", `(uploaded PDF) ${question ? "Q&A" : "Summarize"} — ${file.name}`);
+  showTyping();
+
+  try {
+    const form = new FormData();
+    form.append("pdf", file);
+    form.append("chat_id", activeId || "default");
+    if (question) form.append("question", question);
+
+    const res = await fetch(`${API_BASE}/api/pdf/read`, {
+      method: "POST",
+      headers: { ...authHeaders() },
+      body: form,
+    });
+    const data = await res.json();
+    hideTyping();
+
+    if (data.response) {
+      addMessageEl("assistant", data.response);
+      await loadChats();
+    } else {
+      addMessageEl("assistant", data?.detail || "Could not process the PDF.");
+    }
+  } catch (e) {
+    hideTyping();
+    addMessageEl("assistant", "⚠️ PDF processing failed.");
+  } finally {
+    pdfInput.value = "";
+  }
+});
+
+// ===== NEW: Personalized Retrieval & Reranking (semantic search) =====
+searchBtn?.addEventListener("click", async () => {
+  const q = window.prompt("Search your uploaded docs / context:", "quarterly revenue growth");
+  if (!q) return;
+
+  addMessageEl("user", `Search: ${q}`);
+  showTyping();
+
+  try{
+    const data = await api("/api/search", {
+      method: "POST",
+      body: JSON.stringify({ query: q, chat_id: activeId || "default", k: 8 })
+    });
+    hideTyping();
+
+    if (!data || !data.results) {
+      addMessageEl("assistant", data?.detail || "No results.");
+      return;
+    }
+
+    const lines = data.results.map((r, i) => {
+      const snip = (r.text || "").slice(0, 280).replace(/\n/g,' ');
+      const src = r.source ? ` _(source: ${r.source}, sec ${r.section_idx ?? "-"})_` : "";
+      return `${i+1}. **score:** ${r.score?.toFixed?.(3)}${src}\n> ${snip}${snip.length>=280?"…":""}`;
+    }).join("\n\n");
+
+    addMessageEl("assistant", `**Top results** (personalized & reranked):\n\n${lines}`);
+
+    // Offer source feedback buttons based on these results
+    renderSourceFeedback(data.results.map(r => r.source).filter(Boolean), "Relevant sources");
+
+  }catch(e){
+    hideTyping();
+    addMessageEl("assistant", "⚠️ Search failed.");
+  }
+});
+
+// ===== NEW: Learned Intent Router (fixed) =====
+routeBtn.addEventListener("click", async () => {
+  // use selection or an input
+  let text = (window.getSelection?.().toString() || "").trim();
+  if (!text) {
+    text = window.prompt(
+      "Enter a request to route (Chat / PDF-QA / Vision / Image):",
+      "Summarize the attached PDF"
+    );
+    if (!text) return;
+  }
+
+  addMessageEl("user", `Route this: "${text}"`);
+  showTyping();
+
+  try {
+    // Optional hint: if this chat recently had a PDF uploaded, nudge router toward pdfqa
+    let hasPdfIndex = false;
+    if (activeId) {
+      const chatData = await api(`/api/chats/${activeId}`);
+      const msgs = (chatData && chatData.messages) || [];
+      hasPdfIndex = msgs.some(m => (m.content || "").includes("(uploaded PDF)"));
+    }
+
+    // ✅ Call the correct backend route and use the correct fields
+    const data = await api("/api/route/intent", {
+      method: "POST",
+      body: JSON.stringify({ text, has_pdf_index: hasPdfIndex })
+    });
+
+    hideTyping();
+
+    const intent = (data && (data.intent || data.tool)) || "(unknown)";
+    const conf = data && typeof data.confidence === "number"
+      ? data.confidence.toFixed(2)
+      : "n/a";
+    const method = (data && data.method) || "rules";
+
+    addMessageEl(
+      "assistant",
+      `**Router choice:** \`${intent}\`\n\n_confidence: ${conf} • via ${method}_`
+    );
+  } catch (e) {
+    hideTyping();
+    addMessageEl("assistant", "⚠️ Router failed.");
+  }
+});
+
+// ===== NEW: Next-Question Prediction =====
+nextBtn?.addEventListener("click", async () => {
+  addMessageEl("user", "Suggest next questions");
+  showTyping();
+
+  try{
+    const data = await api("/api/next-questions", {
+      method: "POST",
+      body: JSON.stringify({ chat_id: activeId || "default" })
+    });
+    hideTyping();
+
+    const qs = (data && data.suggestions) || [];
+    if (!qs.length) { addMessageEl("assistant", "No suggestions available."); return; }
+
+    // render as chips (click to insert)
+    const md = qs.map((q,i)=>`**${i+1}.** ${q}`).join("\n\n");
+    addMessageEl("assistant", `Here are some suggestions:\n\n${md}`);
+
+    const bar = document.createElement("div");
+    bar.style.margin = "8px 0 0";
+    bar.innerHTML = qs.map(q => `<button class="btn" style="margin:2px">${q}</button>`).join("");
+    chat.appendChild(bar);
+    Array.from(bar.querySelectorAll("button")).forEach(btn=>{
+      btn.addEventListener("click", () => { input.value = btn.textContent; autosize(); input.focus(); });
+    });
+    chat.scrollTop = chat.scrollHeight;
+  }catch(e){
+    hideTyping();
+    addMessageEl("assistant", "⚠️ Next-question suggestion failed.");
+  }
+});
+
+function renderSourceFeedback(sources, label = "Sources used") {
+  // normalize to a unique list of source names
+  const uniq = [...new Set((sources || []).map(s => {
+    if (!s) return null;
+    if (typeof s === "string") return s;
+    return s.source || null;
+  }).filter(Boolean))];
+
+  if (!uniq.length) return;
+
+  const bar = document.createElement("div");
+  bar.className = "feedback-bar";
+  bar.style.margin = "8px 0 14px";
+  bar.style.display = "flex";
+  bar.style.flexWrap = "wrap";
+  bar.style.gap = "8px";
+  bar.style.alignItems = "center";
+
+  const title = document.createElement("div");
+  title.textContent = label + ":";
+  title.style.opacity = "0.8";
+  bar.appendChild(title);
+
+  uniq.forEach(src => {
+    const group = document.createElement("div");
+    group.style.display = "inline-flex";
+    group.style.alignItems = "center";
+    group.style.gap = "4px";
+    group.style.border = "1px solid var(--border,#333)";
+    group.style.borderRadius = "8px";
+    group.style.padding = "2px 6px";
+
+    const name = document.createElement("span");
+    name.textContent = (src.length > 28 ? src.slice(0, 25) + "…" : src);
+
+    const up = document.createElement("button");
+    up.className = "btn";
+    up.textContent = "👍";
+    up.style.padding = "2px 6px";
+
+    const down = document.createElement("button");
+    down.className = "btn";
+    down.textContent = "👎";
+    down.style.padding = "2px 6px";
+
+    up.addEventListener("click", async () => {
+      try {
+        await api("/api/feedback/click", {
+          method: "POST",
+          body: JSON.stringify({ chat_id: activeId || "default", source: src, positive: true })
+        });
+        up.textContent = "✅";
+        setTimeout(() => (up.textContent = "👍"), 900);
+      } catch {}
+    });
+
+    down.addEventListener("click", async () => {
+      try {
+        await api("/api/feedback/click", {
+          method: "POST",
+          body: JSON.stringify({ chat_id: activeId || "default", source: src, positive: false })
+        });
+        down.textContent = "✅";
+        setTimeout(() => (down.textContent = "👎"), 900);
+      } catch {}
+    });
+
+    group.appendChild(up);
+    group.appendChild(down);
+    group.appendChild(name);
+    bar.appendChild(group);
+  });
+
+  chat.appendChild(bar);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+// ===== INIT =====
 (async function init(){
   await loadChats();
 })();

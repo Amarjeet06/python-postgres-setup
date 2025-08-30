@@ -48,15 +48,26 @@
         </div>
 
         <div class="header-actions">
+          <!-- core -->
           <button id="themeBtn" class="btn icon" title="Toggle theme">🌓</button>
           <button id="clearBtn" class="btn icon" title="Clear conversation">🧹</button>
 
-          <!-- NEW: Image features -->
+          <!-- AI tools -->
           <button id="uploadBtn" class="btn icon" title="Analyze image">📷</button>
+          <button id="pdfBtn" class="btn icon" title="Read PDF">📄</button>
           <button id="genBtn" class="btn icon" title="Generate image">🖼️</button>
-          <input id="imgInput" type="file" accept="image/*" style="display:none" />
 
+          <!-- NEW: ML features -->
+          <button id="searchBtn" class="btn icon" title="Semantic search">🔎</button>
+          <button id="routeBtn" class="btn icon" title="Intent router">🧭</button>
+          <button id="nextBtn" class="btn icon" title="Next questions">❓</button>
+
+          <!-- auth -->
           <button id="logoutBtn" class="btn icon" title="Logout">🚪</button>
+
+          <!-- hidden inputs -->
+          <input id="imgInput" type="file" accept="image/*" style="display:none" />
+          <input id="pdfInput" type="file" accept="application/pdf" style="display:none" />
         </div>
       </header>
 
