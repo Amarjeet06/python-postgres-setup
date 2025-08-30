@@ -262,9 +262,7 @@ async function tryRagAugment(question, k = 6) {
 
 // ===== SEND FLOW (auto RAG + feedback) =====
 sendBtn?.addEventListener("click", sendMessage);
-input.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-});
+// NOTE: we already have the Enter-to-send handler above under TEXTAREA; don't add another here.
 
 async function sendMessage(){
   const text = input.value.trim();
@@ -291,12 +289,15 @@ async function sendMessage(){
     hideTyping();
     addMessageEl("assistant", (data && data.response) || "(no response)");
 
-    // Show source feedback chips when we used RAG
-    if (rag && rag.sources && rag.sources.length) {
-      renderSourceFeedback(rag.sources, "Sources used");
+    // Prefer server-declared sources_used (from answerability auto-wire), else fallback to RAG sources
+    const usedSources =
+      (data && Array.isArray(data.sources_used) && data.sources_used.length ? data.sources_used : (rag && rag.sources) || []);
+
+    if (usedSources.length) {
+      renderSourceFeedback(usedSources, "Sources used");
     }
 
-    // (Optional) refresh sidebar meta; avoid re-rendering messages
+    // refresh sidebar meta (titles/timestamps) without clearing current chat UI
     const chatsData = await api("/api/chats");
     chats = (chatsData && chatsData.chats) ? chatsData.chats : chats;
     renderSidebar();
@@ -464,7 +465,9 @@ searchBtn?.addEventListener("click", async () => {
     const lines = data.results.map((r, i) => {
       const snip = (r.text || "").slice(0, 280).replace(/\n/g,' ');
       const src = r.source ? ` _(source: ${r.source}, sec ${r.section_idx ?? "-"})_` : "";
-      return `${i+1}. **score:** ${r.score?.toFixed?.(3)}${src}\n> ${snip}${snip.length>=280?"…":""}`;
+      const sc = (typeof r.final === "number" ? r.final : r.score);
+      const scStr = (typeof sc === "number" && sc.toFixed) ? sc.toFixed(3) : String(sc ?? "");
+      return `${i+1}. **score:** ${scStr}${src}\n> ${snip}${snip.length>=280?"…":""}`;
     }).join("\n\n");
 
     addMessageEl("assistant", `**Top results** (personalized & reranked):\n\n${lines}`);
@@ -479,7 +482,7 @@ searchBtn?.addEventListener("click", async () => {
 });
 
 // ===== NEW: Learned Intent Router (fixed) =====
-routeBtn.addEventListener("click", async () => {
+routeBtn?.addEventListener("click", async () => {
   // use selection or an input
   let text = (window.getSelection?.().toString() || "").trim();
   if (!text) {
